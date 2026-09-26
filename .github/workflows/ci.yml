@@ -1,0 +1,67 @@
+# Copyright 2020 The Google Java Format Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: CI
+
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+# Cancel in-progress runs for pull requests, but not for master branch pushes
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test-OpenJDK:
+    name: "JDK ${{ matrix.java }} on ${{ matrix.os }} [${{ matrix.expander_leg }}]"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - os: macos-latest
+          java: 25
+          experimental: false
+          arch: arm64
+          runner: macos-latest
+          expander_leg: macos-latest--arm64
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
+    steps:
+    - name: "Check out repository"
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+      with:
+        persist-credentials: false
+    - name: "Set up JDK ${{ matrix.java }} from jdk.java.net"
+      if: ${{ matrix.java == 'EA' }}
+      uses: oracle-actions/setup-java@fff43251af9936a0e6a4d5d0946e14f1680e9b6b   # v1.5.0
+      with:
+        website: jdk.java.net
+        release: ${{ matrix.java }}
+    - name: "Set up JDK ${{ matrix.java }} from Zulu"
+      if: ${{ matrix.java != 'EA' && matrix.java != 'GraalVM' }}
+      uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961   # v5.7.0
+      with:
+        java-version: ${{ matrix.java }}
+        distribution: "zulu"
+        cache: "maven"
+    - name: "Install"
+      shell: bash
+      run: mvn install -DskipTests=true -Dmaven.javadoc.skip=true -B -V
+    - name: "Test"
+      shell: bash
+      run: mvn test -B
+
+    timeout-minutes: 150
